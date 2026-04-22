@@ -1,0 +1,93 @@
+# ==========================================================================
+# Deploy Python Hub to GitHub Pages
+#
+# Tự động build & deploy khi push lên main. Có thể trigger thủ công từ
+# Actions tab. Chỉ upload các file cần serve (index.html, assets/, .nojekyll)
+# → không lộ .claude/, design/, CLAUDE.md qua URL.
+# ==========================================================================
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:          # cho phép bấm "Run workflow" trong UI
+
+# Quyền cần cho GitHub Pages deployment
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Tránh deploy chồng chéo khi có nhiều push liên tiếp
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Job 1 — Validate: check JS syntax trước khi deploy để bắt lỗi sớm
+  # --------------------------------------------------------------------------
+  validate:
+    name: Validate JS syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check all JS files compile
+        run: |
+          failed=0
+          for f in assets/js/*.js assets/data/*.js; do
+            if node -c "$f"; then
+              echo "✓ $f"
+            else
+              echo "✗ $f (syntax error)"
+              failed=1
+            fi
+          done
+          exit $failed
+
+  # --------------------------------------------------------------------------
+  # Job 2 — Deploy: build artifact chỉ chứa file public, upload + deploy Pages
+  # --------------------------------------------------------------------------
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Gom file cần deploy vào _site/ — loại trừ .claude/, design/, *.md nội bộ
+      - name: Prepare deploy artifact
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp .nojekyll _site/
+          cp -r assets _site/
+          # Optional: include README.md để Pages render ở /README (nếu muốn)
+          # cp README.md _site/
+          echo "=== _site contents ==="
+          find _site -type f | sort
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
