@@ -73,8 +73,10 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/
-          cp .nojekyll _site/
           cp -r assets _site/
+          # Tự tạo .nojekyll thay vì copy từ source — không phụ thuộc empty file
+          # dễ bị bỏ sót khi git add. File này báo GitHub Pages đừng xử lý Jekyll.
+          touch _site/.nojekyll
           # Optional: include README.md để Pages render ở /README (nếu muốn)
           # cp README.md _site/
           echo "=== _site contents ==="
